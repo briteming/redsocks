@@ -34,7 +34,16 @@
 #endif
 #if defined USE_PF
 # include <net/if.h>
+#if defined _APPLE_
+#define PRIVATE
+#endif
 # include <net/pfvar.h>
+#if defined _APPLE_
+#define sport sxport.port
+#define dport dxport.port
+#define rdport rdxport.port
+#undef PRIVATE
+#endif
 # include <sys/ioctl.h>
 # include <errno.h>
 #endif
@@ -176,9 +185,9 @@ static int getdestaddr_pf(
 	char clientaddr_str[INET6_ADDRSTRLEN], bindaddr_str[INET6_ADDRSTRLEN];
 
 	memset(&nl, 0, sizeof(struct pfioc_natlook));
-	nl.saddr.v4.s_addr = client->sin_addr.s_addr;
+	nl.saddr.v4addr.s_addr = client->sin_addr.s_addr;
 	nl.sport = client->sin_port;
-	nl.daddr.v4.s_addr = bindaddr->sin_addr.s_addr;
+	nl.daddr.v4addr.s_addr = bindaddr->sin_addr.s_addr;
 	nl.dport = bindaddr->sin_port;
 	nl.af = AF_INET;
 	nl.proto = IPPROTO_TCP;
@@ -197,7 +206,7 @@ static int getdestaddr_pf(
 	}
 	destaddr->sin_family = AF_INET;
 	destaddr->sin_port = nl.rdport;
-	destaddr->sin_addr = nl.rdaddr.v4;
+	destaddr->sin_addr = nl.rdaddr.v4addr;
 	return 0;
 
 fail:
@@ -251,9 +260,11 @@ int apply_tcp_keepalive(int fd)
 {
 	struct { int level, option, value; } opt[] = {
 		{ SOL_SOCKET, SO_KEEPALIVE, 1 },
+#if defined(TCP_KEEPIDLE) && defined(TCP_KEEPCNT) && defined(TCP_KEEPINTVL)
 		{ IPPROTO_TCP, TCP_KEEPIDLE, instance.tcp_keepalive_time },
 		{ IPPROTO_TCP, TCP_KEEPCNT, instance.tcp_keepalive_probes },
 		{ IPPROTO_TCP, TCP_KEEPINTVL, instance.tcp_keepalive_intvl },
+#endif
 	};
 	for (int i = 0; i < SIZEOF_ARRAY(opt); ++i) {
 		if (opt[i].value) {

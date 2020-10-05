@@ -37,9 +37,33 @@
 #include "redsocks.h"
 #include "utils.h"
 #include "libevent-compat.h"
-
+#include "config.h"
 
 #define REDSOCKS_RELAY_HALFBUFF  4096
+
+
+#ifdef _APPLE_
+/* 		
+ * Even though Mac OS X does not support the splice implementation of		
+ * Linux, define the associated flags to avoid undeclared identifier 		
+ * errors.		
+ */		
+#ifndef SPLICE_F_MOVE		
+#define SPLICE_F_MOVE           0x01		
+#endif		
+#ifndef SPLICE_F_NONBLOCK		
+#define SPLICE_F_NONBLOCK       0x02		
+#endif		
+#ifndef SPLICE_F_MORE		
+#define SPLICE_F_MORE           0x04		
+#endif		
+#ifndef SPLICE_F_GIFT		
+#define SPLICE_F_GIFT           0x08		
+#endif	
+int pipe2(int pipefd[2], int flags){return 0;}//unused
+ssize_t splice(int fd_in, off_t *off_in, int fd_out,
+                      off_t *off_out, size_t len, unsigned int flags){return 0;}	//unused
+#endif
 
 enum pump_state_t {
 	pump_active = -1,
@@ -134,7 +158,11 @@ static int redsocks_onenter(parser_section *section)
 	 * Linux:   sysctl net.core.somaxconn
 	 * FreeBSD: sysctl kern.ipc.somaxconn */
 	instance->config.listenq = SOMAXCONN;
+#ifdef _APPLE_
+	instance->config.use_splice = false;
+#else
 	instance->config.use_splice = is_splice_good();
+#endif
 	instance->config.disclose_src = DISCLOSE_NONE;
 	instance->config.on_proxy_fail = ONFAIL_CLOSE;
 
@@ -492,6 +520,8 @@ decide:
 		redsocks_event_del(&pump->c, c->evdst);
 	}
 }
+
+
 
 typedef struct redsplice_read_ctx_t {
 	splice_pipe *dst;

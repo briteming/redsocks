@@ -20,6 +20,9 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#ifdef _APPLE_ 
+#include <netinet/tcp.h>
+#endif
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <assert.h>
@@ -33,6 +36,12 @@
 #include "redsocks.h"
 #include "dnsu2t.h"
 #include "utils.h"
+#include "config.h"
+
+#ifdef _APPLE_
+#define MSG_FASTOPEN 0x20000000
+void tdestroy(void *root, void (*free_node)(void *nodep)) { }
+#endif
 
 #define dnsu2t_log_error(prio, msg...) \
 	redsocks_log_write_plain(__FILE__, __LINE__, __func__, 0, &clientaddr, &self->config.bindaddr, prio, ## msg)
@@ -135,10 +144,11 @@ static void dnsu2t_pkt_from_client(int srvfd, short what, void *_arg)
 			dnsu2t_log_error(LOG_ERR, "event_add");
 			goto fail;
 		}
-
+		
 		// MSG_FASTOPEN is available since Linux 3.6 released on 30 Sep 2012
 		sent = sendto(event_get_fd(&self->relay_rd), &in, pktlen, MSG_FASTOPEN,
 			(struct sockaddr*)&self->config.relayaddr, sizeof(self->config.relayaddr));
+
 		// Also, socket is not writable, right after MSG_FASTOPEN, so listener
 		// should be temporary disabled.
 		if (event_del(&self->listener))
